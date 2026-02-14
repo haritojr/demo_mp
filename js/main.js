@@ -2,25 +2,94 @@
 let fullData = [];
 let currentFilteredData = []; 
 const CACHE_KEY = 'mp_averias_local_data';
+const THEME_KEY = 'mp_theme_preference';
 
 // --- INICIALIZACIÓN ---
 document.addEventListener('DOMContentLoaded', () => {
-    // Forzamos un tiempo mínimo de carga para que se vea el logo (Efecto Premium)
-    setTimeout(() => {
-        initApp();
-    }, 1500); // 1.5 segundos de "branding"
+    // 1. Cargar tema preferido inmediatamente
+    initTheme();
+
+    // 2. Iniciar lógica de datos (background)
+    initApp();
+
+    // 3. Iniciar simulación de Loader
+    runLoaderSimulation();
 });
+
+function runLoaderSimulation() {
+    const bar = document.getElementById('bar');
+    const wrapper = document.getElementById('loader-wrapper');
+    if (!bar || !wrapper) return;
+
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress > 100) progress = 100;
+        
+        bar.style.width = `${progress}%`;
+
+        if (progress === 100) {
+            clearInterval(interval);
+            
+            // 1. Abrir puertas (clase .loaded en CSS)
+            setTimeout(() => {
+                wrapper.classList.add('loaded');
+            }, 500);
+
+            // 2. Desvanecer y eliminar el loader
+            setTimeout(() => {
+                wrapper.style.opacity = '0';
+                setTimeout(() => {
+                    wrapper.style.display = 'none';
+                }, 1000);
+            }, 3000); // Esperar a que las puertas se abran del todo
+        }
+    }, 200);
+}
+
+// Lógica de Tema (Dark/Light)
+function initTheme() {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    // ELIMINADO: const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    // Solo activar modo oscuro si está guardado explícitamente como 'dark'.
+    // Por defecto (null o cualquier otra cosa) será Light Mode.
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-mode');
+        toggleThemeIcons(true);
+    } else {
+        document.body.classList.remove('dark-mode');
+        toggleThemeIcons(false);
+    }
+}
+
+const themeBtn = document.getElementById('themeToggle');
+if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+        toggleThemeIcons(isDark);
+    });
+}
+
+function toggleThemeIcons(isDark) {
+    const sun = document.querySelector('.icon-sun');
+    const moon = document.querySelector('.icon-moon');
+    if (sun && moon) {
+        if (isDark) {
+            sun.classList.remove('hidden');
+            moon.classList.add('hidden');
+        } else {
+            sun.classList.add('hidden');
+            moon.classList.remove('hidden');
+        }
+    }
+}
 
 function initApp() {
     const cached = localStorage.getItem(CACHE_KEY);
     
-    // Ocultar loader tras la espera
-    const loader = document.getElementById('loader');
-    if(loader) {
-        loader.classList.add('fade-out'); // Clase para desvanecer suavemente
-        setTimeout(() => loader.classList.add('hidden'), 500); // Esperar a que termine la transición
-    }
-
     if (cached) {
         try {
             const parsedData = JSON.parse(cached);
@@ -42,6 +111,27 @@ function initApp() {
     }
 }
 
+// --- SISTEMA TOAST NOTIFICATIONS ---
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    let icon = 'ℹ️';
+    if(type === 'success') icon = '✅';
+    if(type === 'error') icon = '❌';
+
+    toast.innerHTML = `<span class="toast-icon">${icon}</span><span>${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
 // --- GESTIÓN DE VISTAS ---
 function showDashboard(isCachedData) {
     document.getElementById('emptyState').classList.add('hidden');
@@ -55,16 +145,16 @@ function showDashboard(isCachedData) {
     updateStats();
 }
 
-// --- FILTROS AVANZADOS ---
+// --- FILTROS Y EVENTOS ---
 const dateStartInput = document.getElementById('dateStart');
 const dateEndInput = document.getElementById('dateEnd');
 const searchInput = document.getElementById('liftSearch');
 const resetBtn = document.getElementById('resetFilters');
-
 const clearBtn = document.getElementById('clearBtn');
+
 if (clearBtn) {
     clearBtn.addEventListener('click', () => {
-        if(confirm('¿Borrar datos importados y volver a la DEMO?')) {
+        if(confirm('¿Estás seguro de borrar los datos importados y volver a la DEMO?')) {
             localStorage.removeItem(CACHE_KEY);
             location.reload();
         }
@@ -83,6 +173,7 @@ if(resetBtn) {
         dateEndInput.value = '';
         searchInput.value = '';
         applyFilters();
+        showToast("Filtros restablecidos", "info");
     });
 }
 
@@ -136,7 +227,6 @@ function updateStats() {
         const d2 = new Date(dateEndInput.value);
         daysRange = Math.max(1, (d2 - d1) / (1000 * 60 * 60 * 24));
     }
-    
     const globalMTBF = totalAv > 0 ? (daysRange * affectedLifts / totalAv).toFixed(0) : "--";
 
     document.getElementById('stat-lifts').innerText = affectedLifts;
@@ -165,7 +255,7 @@ function renderList(data) {
 
         div.innerHTML = `
             <div style="overflow: hidden; padding-right: 0.5rem;">
-                <span style="font-size:0.7rem; font-weight:bold; color:#94a3b8;">${lift.id}</span>
+                <span style="font-size:0.7rem; font-weight:bold; color:var(--mp-text-light);">${lift.id}</span>
                 <div style="font-size:0.85rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${lift.name}</div>
             </div>
             <span class="list-badge">${count}</span>
@@ -179,7 +269,6 @@ function renderList(data) {
 function showDetail(lift) {
     document.getElementById('selectLiftPrompt').classList.add('hidden');
     document.getElementById('liftDetailView').classList.remove('hidden');
-
     document.getElementById('detailId').innerText = lift.id;
     document.getElementById('detailName').innerText = lift.name;
     document.getElementById('detailDate').innerText = lift.date;
@@ -188,7 +277,6 @@ function showDetail(lift) {
     const bloqueEl = document.getElementById('statBloqueColor');
     
     countEl.innerText = lift.averias.length;
-    
     bloqueEl.classList.remove('bg-crit', 'bg-warn', 'bg-ok');
     
     if (lift.averias.length >= 5) bloqueEl.classList.add('bg-crit');
@@ -205,7 +293,7 @@ function showDetail(lift) {
 
     const container = document.getElementById('averiasContainer');
     if (lift.averias.length === 0) {
-        container.innerHTML = `<div style="text-align: center; color: #94a3b8; font-style: italic;">Sin averías en este periodo</div>`;
+        container.innerHTML = `<div style="text-align: center; color: var(--mp-text-light); font-style: italic;">Sin averías en este periodo</div>`;
         return;
     }
 
@@ -217,10 +305,10 @@ function showDetail(lift) {
         return `
         <div class="averia-card">
             <div style="display:flex; justify-content:space-between; margin-bottom:0.5rem;">
-                <div><span style="font-weight:bold; font-family:monospace;">#${av.id}</span> <span style="font-size:0.7rem; background:#f1f5f9; padding:2px 5px; border-radius:4px;">${av.category}</span></div>
-                <span style="font-size:0.75rem; color:#64748b; font-weight:bold;">${av.date}</span>
+                <div><span style="font-weight:bold; font-family:monospace;">#${av.id}</span> <span style="font-size:0.7rem; background:rgba(0,0,0,0.05); padding:2px 5px; border-radius:4px;">${av.category}</span></div>
+                <span style="font-size:0.75rem; color:var(--mp-text-light); font-weight:bold;">${av.date}</span>
             </div>
-            <p style="font-size:0.85rem; margin:0;">${av.desc}</p>
+            <p style="font-size:0.85rem; margin:0; color:var(--mp-text);">${av.desc}</p>
         </div>`;
     }).join('');
 }
@@ -257,15 +345,17 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
     });
 });
 
-// --- PROCESAMIENTO EXCEL CORREGIDO ---
+// --- PROCESAMIENTO EXCEL CON TOASTS ---
 const fileInput = document.getElementById('fileInput');
 if (fileInput) {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (!file) return;
-        document.getElementById('loader').classList.remove('hidden');
-        // Quitar la clase fade-out por si se reutiliza el loader
-        document.getElementById('loader').classList.remove('fade-out');
+        // Reiniciar animación del loader si se carga nuevo archivo (opcional)
+        document.getElementById('loader-wrapper').style.display = 'flex';
+        document.getElementById('loader-wrapper').style.opacity = '1';
+        document.getElementById('loader-wrapper').classList.remove('loaded');
+        runLoaderSimulation();
         
         setTimeout(() => {
             const reader = new FileReader();
@@ -278,17 +368,13 @@ if (fileInput) {
                     processData(rows);
                 } catch (err) { 
                     console.error(err);
-                    alert("Error al procesar el archivo. Verifica el formato.");
+                    showToast("Error al leer el archivo. Formato inválido.", "error");
                 } finally { 
-                    // Transición de salida del loader
-                    const l = document.getElementById('loader');
-                    l.classList.add('fade-out');
-                    setTimeout(() => l.classList.add('hidden'), 500);
                     e.target.value = ''; 
                 }
             };
             reader.readAsArrayBuffer(file);
-        }, 1000); // Pequeño delay también al cargar archivo
+        }, 1000);
     });
 }
 
@@ -343,8 +429,9 @@ function processData(rows) {
 
     if (newData.length > 0) {
         localStorage.setItem(CACHE_KEY, JSON.stringify(newData));
-        location.reload(); 
+        showToast(`Datos importados correctamente. ${newData.length} ascensores.`, "success");
+        setTimeout(() => location.reload(), 1500); 
     } else { 
-        alert("No se encontraron datos válidos en el archivo Excel. Verifica la estructura."); 
+        showToast("No se encontraron datos válidos en el Excel.", "error");
     }
 }
